@@ -627,7 +627,7 @@ Option<bool> vLLMConversationModel::validate_model(const nlohmann::json& model_c
         headers["Authorization"] = "Bearer " + model_config["api_key"].get<std::string>();
     }
     if (model_config.count("timeout_ms") != 0) {
-        headers["timeout_ms"] = model_config["timeout_ms"].get<size_t>();
+        headers["timeout_ms"] = std::to_string(model_config["timeout_ms"].get<size_t>());
     }
 
     std::map<std::string, std::string> res_headers;
@@ -717,7 +717,7 @@ Option<std::string> vLLMConversationModel::get_answer(const std::string& context
     std::map<std::string, std::string> res_headers;
     headers["Authorization"] = !api_key.empty() ? "Bearer " + api_key : "";
     headers["Content-Type"] = "application/json";
-    headers["timeout_ms"] = timeout_ms;
+    headers["timeout_ms"] = std::to_string(timeout_ms);
     nlohmann::json req_body;
     req_body["model"] = model_name;
     req_body["messages"] = nlohmann::json::array();
@@ -789,7 +789,7 @@ Option<std::string> vLLMConversationModel::get_standalone_question(const nlohman
     std::map<std::string, std::string> res_headers;
     headers["Authorization"] = !api_key.empty() ? "Bearer " + api_key : "";
     headers["Content-Type"] = "application/json";
-    headers["timeout_ms"] = timeout_ms;
+    headers["timeout_ms"] = std::to_string(timeout_ms);
     nlohmann::json req_body;
     req_body["model"] = model_name;
     req_body["messages"] = nlohmann::json::array();
