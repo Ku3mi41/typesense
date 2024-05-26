@@ -4,6 +4,7 @@
 #include "embedder_manager.h"
 #include "text_embedder_remote.h"
 #include "conversation_manager.h"
+#include <http_proxy.h>
 
 
 const std::string get_model_namespace(const std::string& model_name) {
@@ -612,11 +613,27 @@ Option<bool> vLLMConversationModel::validate_model(const nlohmann::json& model_c
     if(!model_config["vllm_url"].is_string()) {
         return Option<bool>(400, "vLLM URL is not a string");
     }
+
+    if(model_config.count("api_key") != 0 && !model_config["api_key"].is_string()) {
+        return Option<bool>(400, "vLLM API key not a string");
+    }
+
+    if(model_config.count("timeout_ms") != 0 && (!model_config["timeout_ms"].is_number_unsigned() || model_config["timeout_ms"].get<size_t>() == 0)) {
+        return Option<bool>(400, "Property `timeout_ms` is not provided or not a positive integer.");
+    }
     
     std::unordered_map<std::string, std::string> headers;
+    if (model_config.count("api_key") != 0) {
+        headers["Authorization"] = "Bearer " + model_config["api_key"].get<std::string>();
+    }
+    if (model_config.count("timeout_ms") != 0) {
+        headers["timeout_ms"] = model_config["timeout_ms"].get<size_t>();
+    }
+
     std::map<std::string, std::string> res_headers;
     std::string res;
     auto res_code = RemoteEmbedder::call_remote_api("GET", get_list_models_url(model_config["vllm_url"]), "", res, res_headers, headers);
+    const std::atomic<bool> stream_mode = model_config.count("stream_mode") != 0 ? model_config["stream_mode"].get<bool>() : false;
 
     if(res_code == 408) {
         return Option<bool>(408, "vLLM API timeout.");
@@ -666,7 +683,7 @@ Option<bool> vLLMConversationModel::validate_model(const nlohmann::json& model_c
     ])"_json;
     std::string chat_res;
 
-    res_code = RemoteEmbedder::call_remote_api("POST", get_chat_completion_url(model_config["vllm_url"]), req_body.dump(-1), chat_res, res_headers, headers);
+    res_code = RemoteEmbedder::call_remote_api(stream_mode ? "POST_STREAM" :"POST", get_chat_completion_url(model_config["vllm_url"]), req_body.dump(-1), chat_res, res_headers, headers);
 
     if(res_code == 408) {
         return Option<bool>(408, "vLLM API timeout.");
@@ -692,10 +709,15 @@ Option<std::string> vLLMConversationModel::get_answer(const std::string& context
                                               const std::string& system_prompt, const nlohmann::json& model_config) {
     const std::string model_name = EmbedderManager::get_model_name_without_namespace(model_config["model_name"].get<std::string>());
     const std::string vllm_url = model_config["vllm_url"].get<std::string>();
+    const size_t timeout_ms = model_config.count("timeout_ms") != 0 ? model_config["timeout_ms"].get<size_t>() : HttpProxy::default_timeout_ms;
+    const std::string api_key = model_config.count("api_key") != 0 ? model_config["api_key"].get<std::string>() : "";
+    const std::atomic<bool> stream_mode = model_config.count("stream_mode") != 0 ? model_config["stream_mode"].get<bool>() : false;
 
     std::unordered_map<std::string, std::string> headers;
     std::map<std::string, std::string> res_headers;
+    headers["Authorization"] = !api_key.empty() ? "Bearer " + api_key : "";
     headers["Content-Type"] = "application/json";
+    headers["timeout_ms"] = timeout_ms;
     nlohmann::json req_body;
     req_body["model"] = model_name;
     req_body["messages"] = nlohmann::json::array();
@@ -713,7 +735,7 @@ Option<std::string> vLLMConversationModel::get_answer(const std::string& context
     req_body["messages"].push_back(message);
 
     std::string res;
-    auto res_code = RemoteEmbedder::call_remote_api("POST", get_chat_completion_url(vllm_url), req_body.dump(), res, res_headers, headers);
+    auto res_code = RemoteEmbedder::call_remote_api(stream_mode ? "POST_STREAM" :"POST", get_chat_completion_url(vllm_url), req_body.dump(), res, res_headers, headers);
 
     if(res_code == 408) {
         throw Option<std::string>(400, "vLLM API timeout.");
@@ -759,9 +781,15 @@ Option<std::string> vLLMConversationModel::get_standalone_question(const nlohman
         
     const std::string model_name = EmbedderManager::get_model_name_without_namespace(model_config["model_name"].get<std::string>());
     const std::string vllm_url = model_config["vllm_url"].get<std::string>();
+    const size_t timeout_ms = model_config.count("timeout_ms") != 0 ? model_config["timeout_ms"].get<size_t>() : HttpProxy::default_timeout_ms;
+    const std::string api_key = model_config.count("api_key") != 0 ? model_config["api_key"].get<std::string>() : "";
+    const std::atomic<bool> stream_mode = model_config.count("stream_mode") != 0 ? model_config["stream_mode"].get<bool>() : false;
+
     std::unordered_map<std::string, std::string> headers;
     std::map<std::string, std::string> res_headers;
+    headers["Authorization"] = !api_key.empty() ? "Bearer " + api_key : "";
     headers["Content-Type"] = "application/json";
+    headers["timeout_ms"] = timeout_ms;
     nlohmann::json req_body;
     req_body["model"] = model_name;
     req_body["messages"] = nlohmann::json::array();
@@ -795,7 +823,7 @@ Option<std::string> vLLMConversationModel::get_standalone_question(const nlohman
 
     req_body["messages"].push_back(message);
 
-    auto res_code = RemoteEmbedder::call_remote_api("POST", get_chat_completion_url(vllm_url), req_body.dump(), res, res_headers, headers);
+    auto res_code = RemoteEmbedder::call_remote_api(stream_mode ? "POST_STREAM" :"POST", get_chat_completion_url(vllm_url), req_body.dump(), res, res_headers, headers);
 
     if(res_code == 408) {
         return Option<std::string>(400, "vLLM API timeout.");
