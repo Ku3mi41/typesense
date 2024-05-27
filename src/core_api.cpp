@@ -891,6 +891,7 @@ bool post_multi_search(const std::shared_ptr<http_req>& req, const std::shared_p
         }
 
         auto answer_op = ConversationModel::get_answer(result_docs.dump(0), prompt, conversation_model);
+        LOG(INFO) << "894: answer_op.ok " << answer_op.ok() ? "true" : "false";
 
         if(!answer_op.ok()) {
             res->set_400(answer_op.error());
@@ -901,45 +902,60 @@ bool post_multi_search(const std::shared_ptr<http_req>& req, const std::shared_p
         response["conversation"]["query"] = common_query;
         response["conversation"]["answer"] = answer_op.get();
 
+        LOG(INFO) << "905: query" << common_query;
+        LOG(INFO) << "906: answer" << answer_op.get();
+
         auto formatted_question_op = ConversationModel::format_question(common_query, conversation_model);
+        LOG(INFO) << "909: formatted_question_op.ok " << formatted_question_op.ok() ? "true" : "false";
         if(!formatted_question_op.ok()) {
             res->set_400(formatted_question_op.error());
             return false;
         }
 
         auto formatted_answer_op = ConversationModel::format_answer(answer_op.get(), conversation_model);
+        LOG(INFO) << "916: formatted_answer_op.ok " << formatted_answer_op.ok() ? "true" : "false";
         if(!formatted_answer_op.ok()) {
             res->set_400(formatted_answer_op.error());
             return false;
         }
 
         std::vector<std::string> exclude_fields;
+        LOG(INFO) << "923";
         StringUtils::split(req->params["exclude_fields"], exclude_fields, ",");
         bool exclude_conversation_history = std::find(exclude_fields.begin(), exclude_fields.end(), "conversation_history") != exclude_fields.end();
+        LOG(INFO) << "926";
 
         nlohmann::json conversation_history = nlohmann::json::array();
         conversation_history.push_back(formatted_question_op.get());
         conversation_history.push_back(formatted_answer_op.get());
+        LOG(INFO) << "931";
         std::string conversation_id = conversation_history ? orig_req_params["conversation_id"] : "";
+        LOG(INFO) << "933";
 
         auto add_conversation_op = ConversationManager::get_instance().add_conversation(conversation_history, conversation_model["conversation_collection"], conversation_id);
+        LOG(INFO) << "935";
         if(!add_conversation_op.ok()) {
             res->set_400(add_conversation_op.error());
             return false;
         }
 
+        LOG(INFO) << "941";
         auto get_conversation_op = ConversationManager::get_instance().get_conversation(add_conversation_op.get());
+        LOG(INFO) << "943";
         if(!get_conversation_op.ok()) {
             res->set_400(get_conversation_op.error());
             return false;
         }
+        LOG(INFO) << "948";
         if(!exclude_conversation_history) {
             response["conversation"]["conversation_history"] = get_conversation_op.get();
         }
+        LOG(INFO) << "952";
         response["conversation"]["conversation_id"] = add_conversation_op.get();
 
     }
 
+    LOG(INFO) << "958";
     res->set_200(response.dump());
 
     // we will cache only successful requests
