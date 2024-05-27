@@ -929,7 +929,7 @@ bool post_multi_search(const std::shared_ptr<http_req>& req, const std::shared_p
         conversation_history.push_back(formatted_question_op.get());
         conversation_history.push_back(formatted_answer_op.get());
         LOG(INFO) << "931";
-        std::string conversation_id = conversation_history ? orig_req_params["conversation_id"] : "";
+        std::string conversation_id = conversation_history.size() > 0 ? orig_req_params["conversation_id"] : "";
         LOG(INFO) << "933";
 
         auto add_conversation_op = ConversationManager::get_instance().add_conversation(conversation_history, conversation_model["conversation_collection"], conversation_id);
